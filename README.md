@@ -132,11 +132,18 @@ docker compose up --build
 
 ## Deployment
 
-1. Provision an AWS EC2 instance with Docker and Docker Compose.
-2. Set environment variables for MySQL, AI provider keys, job API keys, and JWT secret.
-3. Pull the repository on EC2.
-4. Run `docker compose up -d --build`.
-5. Extend `.github/workflows/ci-cd.yml` with your EC2 SSH deployment secrets.
+1. Provision an AWS EC2 instance with Docker and Docker Compose plugin.
+2. Push code to GitHub `main` branch.
+3. Add repository secrets used by `.github/workflows/ci-cd.yml`:
+   - `EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`, `EC2_PORT`
+   - `GHCR_USERNAME`, `GHCR_TOKEN`
+   - `MYSQL_ROOT_PASSWORD`, `MYSQL_DATABASE`, `JWT_SECRET`
+   - `AI_PROVIDER`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_URL`
+   - `RAPIDAPI_KEY`, `RAPIDAPI_HOST`, `RAPIDAPI_URL`
+   - `APP_EMAIL_ENABLED`, `APP_EMAIL_FROM`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_SMTP_AUTH`, `MAIL_SMTP_STARTTLS_ENABLE`
+   - `APP_ALLOWED_ORIGINS`
+4. Ensure GHCR package visibility/token permission allows EC2 pull.
+5. On push to `main`, workflow builds/tests, pushes Docker images, and deploys with `docker-compose.prod.yml`.
 
 ## Notes
 
