@@ -41,11 +41,11 @@ jobs:
     permissions:
       contents: read
       packages: write
-    outputs:
-      backend_image: ${{ steps.meta_backend.outputs.tags }}
-      frontend_image: ${{ steps.meta_frontend.outputs.tags }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
       - name: Login to GHCR
         uses: docker/login-action@v3
@@ -54,45 +54,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract backend image metadata
-        id: meta_backend
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/ai-career-assistant-backend
-          tags: |
-            type=raw,value=latest
-            type=sha
-
-      - name: Build and push backend image
+      - name: Build and push backend
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ steps.meta_backend.outputs.tags }}
-          labels: ${{ steps.meta_backend.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ghcr.io/${{ github.repository_owner }}/ai-career-assistant-backend:latest
 
-      - name: Extract frontend image metadata
-        id: meta_frontend
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository_owner }}/ai-career-assistant-frontend
-          tags: |
-            type=raw,value=latest
-            type=sha
-
-      - name: Build and push frontend image
+      - name: Build and push frontend
         uses: docker/build-push-action@v6
         with:
           context: ./frontend
           file: ./frontend/Dockerfile
           push: true
-          tags: ${{ steps.meta_frontend.outputs.tags }}
-          labels: ${{ steps.meta_frontend.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: ghcr.io/${{ github.repository_owner }}/ai-career-assistant-frontend:latest
 
   deploy-ec2:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -108,7 +84,7 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           port: ${{ secrets.EC2_PORT || 22 }}
-          source: docker-compose.prod.yml
+          source: docker-compose.yml
           target: ~/ai-career-assistant
 
       - name: Deploy containers on EC2
@@ -121,32 +97,19 @@ jobs:
           script: |
             mkdir -p ~/ai-career-assistant
             cat > ~/ai-career-assistant/.env <<EOF
-            MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}
-            MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }}
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
             JWT_SECRET=${{ secrets.JWT_SECRET }}
             AI_PROVIDER=${{ secrets.AI_PROVIDER }}
-            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-            OPENAI_MODEL=${{ secrets.OPENAI_MODEL }}
             GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
-            GEMINI_MODEL=${{ secrets.GEMINI_MODEL }}
-            GEMINI_URL=${{ secrets.GEMINI_URL }}
+            OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
             RAPIDAPI_KEY=${{ secrets.RAPIDAPI_KEY }}
-            RAPIDAPI_HOST=${{ secrets.RAPIDAPI_HOST }}
-            RAPIDAPI_URL=${{ secrets.RAPIDAPI_URL }}
-            APP_EMAIL_ENABLED=${{ secrets.APP_EMAIL_ENABLED }}
-            APP_EMAIL_FROM=${{ secrets.APP_EMAIL_FROM }}
             MAIL_HOST=${{ secrets.MAIL_HOST }}
-            MAIL_PORT=${{ secrets.MAIL_PORT }}
             MAIL_USERNAME=${{ secrets.MAIL_USERNAME }}
             MAIL_PASSWORD=${{ secrets.MAIL_PASSWORD }}
-            MAIL_SMTP_AUTH=${{ secrets.MAIL_SMTP_AUTH }}
-            MAIL_SMTP_STARTTLS_ENABLE=${{ secrets.MAIL_SMTP_STARTTLS_ENABLE }}
-            APP_ALLOWED_ORIGINS=${{ secrets.APP_ALLOWED_ORIGINS }}
             BACKEND_IMAGE=ghcr.io/${{ github.repository_owner }}/ai-career-assistant-backend:latest
             FRONTEND_IMAGE=ghcr.io/${{ github.repository_owner }}/ai-career-assistant-frontend:latest
             EOF
-
-            docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} -p ${{ secrets.GHCR_TOKEN }}
             cd ~/ai-career-assistant
-            docker compose --env-file .env -f docker-compose.prod.yml pull
-            docker compose --env-file .env -f docker-compose.prod.yml up -d --remove-orphans
+            docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
+            docker-compose pull
+            docker-compose up -d --remove-orphans
