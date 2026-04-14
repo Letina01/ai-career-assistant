@@ -60,7 +60,7 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository_owner.toLowerCase() }}/ai-career-assistant-backend:latest
+          tags: ghcr.io/letina01/ai-career-assistant-backend:latest
 
       - name: Build and push frontend
         uses: docker/build-push-action@v6
@@ -68,7 +68,7 @@ jobs:
           context: ./frontend
           file: ./frontend/Dockerfile
           push: true
-          tags: ghcr.io/${{ github.repository_owner.toLowerCase() }}/ai-career-assistant-frontend:latest
+          tags: ghcr.io/letina01/ai-career-assistant-frontend:latest
 
   deploy-ec2:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -106,8 +106,8 @@ jobs:
             MAIL_HOST=${{ secrets.MAIL_HOST }}
             MAIL_USERNAME=${{ secrets.MAIL_USERNAME }}
             MAIL_PASSWORD=${{ secrets.MAIL_PASSWORD }}
-            BACKEND_IMAGE=ghcr.io/${{ github.repository_owner.toLowerCase() }}/ai-career-assistant-backend:latest
-            FRONTEND_IMAGE=ghcr.io/${{ github.repository_owner.toLowerCase() }}/ai-career-assistant-frontend:latest
+            BACKEND_IMAGE=ghcr.io/letina01/ai-career-assistant-backend:latest
+            FRONTEND_IMAGE=ghcr.io/letina01/ai-career-assistant-frontend:latest
             EOF
             cd ~/ai-career-assistant
             docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }}
