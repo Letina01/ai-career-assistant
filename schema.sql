@@ -26,6 +26,9 @@ CREATE TABLE user_account (
     updated_at DATETIME NOT NULL
 );
 
+CREATE INDEX idx_user_email ON user_account(email);
+CREATE INDEX idx_user_role ON user_account(role);
+
 CREATE TABLE resume (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     owner_id BIGINT NOT NULL,
@@ -33,10 +36,14 @@ CREATE TABLE resume (
     email VARCHAR(255) NOT NULL,
     file_name VARCHAR(255) NOT NULL,
     extracted_text LONGTEXT NOT NULL,
+    file_data LONGBLOB,
+    file_type VARCHAR(100),
     created_at DATETIME NOT NULL,
     updated_at DATETIME NOT NULL,
     CONSTRAINT fk_resume_owner FOREIGN KEY (owner_id) REFERENCES user_account(id)
 );
+
+CREATE INDEX idx_resume_owner ON resume(owner_id);
 
 CREATE TABLE resume_analysis (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -62,6 +69,8 @@ CREATE TABLE saved_job (
     CONSTRAINT fk_saved_job_owner FOREIGN KEY (owner_id) REFERENCES user_account(id)
 );
 
+CREATE INDEX idx_saved_job_owner ON saved_job(owner_id);
+
 CREATE TABLE chat_session (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     owner_id BIGINT NOT NULL,
@@ -81,6 +90,9 @@ CREATE TABLE chat_message (
     updated_at DATETIME NOT NULL,
     CONSTRAINT fk_chat_message_session FOREIGN KEY (session_id) REFERENCES chat_session(id)
 );
+
+CREATE INDEX idx_chat_message_session ON chat_message(session_id);
+CREATE INDEX idx_chat_message_created ON chat_message(created_at);
 
 CREATE TABLE email_log (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -108,6 +120,8 @@ CREATE TABLE job_posting (
     CONSTRAINT fk_job_posting_recruiter FOREIGN KEY (recruiter_id) REFERENCES user_account(id)
 );
 
+CREATE INDEX idx_job_posting_recruiter ON job_posting(recruiter_id);
+
 CREATE TABLE job_application (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     job_posting_id BIGINT NOT NULL,
@@ -120,6 +134,10 @@ CREATE TABLE job_application (
     CONSTRAINT fk_job_application_applicant FOREIGN KEY (applicant_id) REFERENCES user_account(id),
     CONSTRAINT fk_job_application_resume FOREIGN KEY (resume_id) REFERENCES resume(id)
 );
+
+CREATE INDEX idx_job_application_applicant ON job_application(applicant_id);
+CREATE INDEX idx_job_application_posting ON job_application(job_posting_id);
+CREATE INDEX idx_job_application_status ON job_application(status);
 
 CREATE TABLE application_status_history (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
@@ -144,3 +162,10 @@ CREATE TABLE password_reset_token (
     updated_at DATETIME NOT NULL,
     CONSTRAINT fk_password_reset_user FOREIGN KEY (user_id) REFERENCES user_account(id)
 );
+
+-- ============================================
+-- MIGRATION: Add resume file columns (for existing databases)
+-- Run this if resume table already exists without these columns
+-- ============================================
+-- ALTER TABLE resume ADD COLUMN file_data LONGBLOB;
+-- ALTER TABLE resume ADD COLUMN file_type VARCHAR(100);

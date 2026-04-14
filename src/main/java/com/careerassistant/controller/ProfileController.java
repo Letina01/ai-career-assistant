@@ -3,6 +3,7 @@ package com.careerassistant.controller;
 import com.careerassistant.dto.profile.ApplicantProfileRequest;
 import com.careerassistant.dto.profile.ApplicantProfileResponse;
 import com.careerassistant.service.ProfileService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -14,7 +15,6 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/profile")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('APPLICANT')")
 public class ProfileController {
 
     private final ProfileService profileService;
@@ -25,7 +25,7 @@ public class ProfileController {
     }
 
     @PutMapping
-    public ApplicantProfileResponse updateMyProfile(@RequestBody ApplicantProfileRequest request) {
+    public ApplicantProfileResponse updateMyProfile(@Valid @RequestBody ApplicantProfileRequest request) {
         return profileService.updateMyProfile(request);
     }
 }

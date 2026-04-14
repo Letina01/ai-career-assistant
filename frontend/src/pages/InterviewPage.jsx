@@ -1,27 +1,36 @@
 import { useEffect, useState } from 'react';
-import { fetchProfile, generateInterviewPrep } from '../api';
+import { fetchResumes, fetchProfile, generateInterviewPrep } from '../api';
 import SectionCard from '../components/SectionCard';
 
 export default function InterviewPage() {
-  const [form, setForm] = useState({ role: '', focusArea: '' });
+  const [resumes, setResumes] = useState([]);
+  const [form, setForm] = useState({ resumeId: '', targetRole: '', focusArea: '' });
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    fetchProfile().then((profile) => {
-      setForm({
-        role: profile?.preferredRole || profile?.currentRole || '',
-        focusArea: 'Role fundamentals, project deep dive, and practical scenarios'
-      });
-    }).catch(() => {});
+    Promise.all([fetchResumes(), fetchProfile()])
+      .then(([resumeData, profile]) => {
+        setResumes(resumeData);
+        setForm({
+          resumeId: resumeData[0]?.resumeId || '',
+          targetRole: profile?.preferredRole || profile?.currentRole || '',
+          focusArea: 'Role fundamentals, technical skills, system design, and behavioral scenarios'
+        });
+      })
+      .catch(() => {});
   }, []);
 
   const submit = async (event) => {
     event.preventDefault();
     setError('');
-    if (!form.role.trim() || !form.focusArea.trim()) {
-      setError('Please enter role and focus area.');
+    if (!form.resumeId) {
+      setError('Please select a resume.');
+      return;
+    }
+    if (!form.targetRole.trim() || !form.focusArea.trim()) {
+      setError('Please enter target role and focus area.');
       return;
     }
     setLoading(true);
@@ -37,37 +46,111 @@ export default function InterviewPage() {
 
   return (
     <div className="page-grid">
-      <SectionCard title="Interview Preparation" subtitle="Questions, answers, and roadmap">
+      <SectionCard title="Interview Preparation" subtitle="Resume-based interview prep with Q&A and roadmap">
         <form className="form" onSubmit={submit}>
-          <input value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} placeholder="Target role" />
-          <input value={form.focusArea} onChange={(e) => setForm({ ...form, focusArea: e.target.value })} placeholder="Focus area" />
+          <select 
+            value={form.resumeId} 
+            onChange={(e) => setForm({ ...form, resumeId: e.target.value })}
+            className="form-input"
+          >
+            <option value="">Select your resume</option>
+            {resumes.map((resume) => (
+              <option key={resume.resumeId} value={resume.resumeId}>
+                {resume.candidateName}
+              </option>
+            ))}
+          </select>
+          <input 
+            value={form.targetRole} 
+            onChange={(e) => setForm({ ...form, targetRole: e.target.value })} 
+            placeholder="Target role (e.g., Senior Software Engineer, Product Manager)"
+          />
+          <input 
+            value={form.focusArea} 
+            onChange={(e) => setForm({ ...form, focusArea: e.target.value })} 
+            placeholder="Interview focus areas (e.g., system design, behavioral, technical)"
+          />
           {error && <p className="error-text">{error}</p>}
-          <button type="submit" disabled={loading}>{loading ? 'Generating...' : 'Generate Prep'}</button>
+          <button type="submit" disabled={loading || !form.resumeId}>
+            {loading ? 'Generating...' : 'Generate Interview Prep'}
+          </button>
         </form>
       </SectionCard>
 
-      <SectionCard title="Preparation Output" subtitle="Role-specific interview content">
+      <SectionCard title="Interview Preparation Output" subtitle="Personalized Q&A and 6-week learning roadmap">
         {result ? (
           <div className="stack">
             <div>
-              <strong>Questions & Answers</strong>
-              <ul>
-                {result.questionAnswers.map((item) => (
-                  <li key={item.question}>
-                    <strong>{item.question}</strong>: {item.answer}
-                  </li>
+              <h3>Interview Questions & Answers for {result.role}</h3>
+              <div className="qa-list">
+                {result.questionAnswers.map((item, idx) => (
+                  <div key={idx} className="qa-item">
+                    <details>
+                      <summary className="question">
+                        <strong>Q{idx + 1}: {item.question}</strong>
+                      </summary>
+                      <p className="answer">{item.answer}</p>
+                    </details>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </div>
             <div>
-              <strong>Roadmap</strong>
-              <ul>
-                {result.roadmap.map((item) => <li key={item}>{item}</li>)}
-              </ul>
+              <h3>6-Week Learning Roadmap</h3>
+              <ol className="roadmap">
+                {result.roadmap.map((step, idx) => (
+                  <li key={idx}>
+                    <strong>Week {idx + 1}:</strong> {step}
+                  </li>
+                ))}
+              </ol>
             </div>
           </div>
-        ) : <p className="muted">Generate a role-specific interview plan.</p>}
+        ) : (
+          <p className="muted">💡 Select a resume and enter your target role to generate personalized interview preparation.</p>
+        )}
       </SectionCard>
+
+      <style>{`
+        .qa-list {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .qa-item {
+          border-left: 4px solid #6366f1;
+          padding-left: 12px;
+        }
+        .question {
+          cursor: pointer;
+          padding: 8px 0;
+          color: #1f2937;
+          font-weight: 600;
+        }
+        .question:hover {
+          color: #6366f1;
+        }
+        .answer {
+          margin-top: 8px;
+          padding: 12px;
+          background-color: #f3f4f6;
+          border-radius: 6px;
+          line-height: 1.6;
+          color: #374151;
+        }
+        .roadmap {
+          padding-left: 20px;
+          gap: 12px;
+          display: flex;
+          flex-direction: column;
+        }
+        .roadmap li {
+          padding: 10px;
+          background-color: #f0f9ff;
+          border-radius: 6px;
+          border-left: 4px solid #0284c7;
+        }
+      `}</style>
     </div>
   );
 }

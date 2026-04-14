@@ -20,6 +20,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.tika.Tika;
 import org.apache.tika.exception.TikaException;
 import org.springframework.stereotype.Service;
@@ -28,6 +29,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ResumeServiceImpl implements ResumeService {
 
     private final ResumeRepository resumeRepository;
@@ -41,17 +43,48 @@ public class ResumeServiceImpl implements ResumeService {
     @Override
     @Transactional
     public ResumeUploadResponse uploadAndAnalyze(String candidateName, String email, MultipartFile file) {
+        log.info("========== RESUME UPLOAD STARTED ==========");
+        log.info("Step 1: Extracting text from file: {}", file.getOriginalFilename());
+        
+        // Step 1: Extract text from PDF
         String extractedText = extractText(file);
+        log.info("Step 1 COMPLETE: Extracted {} characters", extractedText.length());
 
+        // Step 2: Get current user
+        log.info("Step 2: Getting current user...");
+        var currentUser = currentUserService.getCurrentUser();
+        log.info("Step 2 COMPLETE: User ID={}, Email={}", currentUser.getId(), currentUser.getEmail());
+
+        // Step 3: Save resume to database
+        log.info("Step 3: Saving resume to database...");
         Resume resume = new Resume();
-        resume.setOwner(currentUserService.getCurrentUser());
+        resume.setOwner(currentUser);
         resume.setCandidateName(candidateName);
         resume.setEmail(email);
         resume.setFileName(file.getOriginalFilename());
         resume.setExtractedText(extractedText);
+        resume.setFileType(file.getContentType());
+        try {
+            byte[] fileBytes = file.getBytes();
+            resume.setFileData(fileBytes);
+            log.info("File bytes read successfully. Size: {} bytes, ContentType: {}", 
+                    fileBytes.length, file.getContentType());
+        } catch (IOException e) {
+            log.error("Failed to read file bytes: {}", e.getMessage());
+            throw new RuntimeException("Failed to process uploaded file", e);
+        }
         Resume savedResume = resumeRepository.save(resume);
+        log.info("Step 3 COMPLETE: Resume saved with ID={}, FileName={}, FileData length={}", 
+                savedResume.getId(), savedResume.getFileName(), 
+                savedResume.getFileData() != null ? savedResume.getFileData().length : "null");
 
+        // Step 4: Analyze resume with AI
+        log.info("Step 4: Analyzing resume with AI...");
         ResumeAnalysisResult result = aiService.analyzeResume(extractedText);
+        log.info("Step 4 COMPLETE: ATS Score={}, Skills found={}", result.atsScore(), result.extractedSkills().size());
+
+        // Step 5: Save analysis to database
+        log.info("Step 5: Saving resume analysis...");
         ResumeAnalysis analysis = new ResumeAnalysis();
         analysis.setResume(savedResume);
         analysis.setAtsScore(result.atsScore());
@@ -59,24 +92,58 @@ public class ResumeServiceImpl implements ResumeService {
         analysis.setMissingSkills(String.join(",", result.missingSkills()));
         analysis.setSuggestions(String.join("||", result.suggestions()));
         resumeAnalysisRepository.save(analysis);
-        emailService.sendResumeAnalysisReport(savedResume, result);
+        log.info("Step 5 COMPLETE: Analysis saved");
 
-        String preferredRole = resume.getOwner().getPreferredRole();
-        String preferredLocation = resume.getOwner().getPreferredLocation();
+        // Step 6: Send email (make it non-blocking - wrap in try-catch)
+        log.info("Step 6: Sending resume analysis email...");
+        try {
+            emailService.sendResumeAnalysisReport(savedResume, result);
+            log.info("Step 6 COMPLETE: Email sent");
+        } catch (Exception emailEx) {
+            log.error("Step 6 FAILED (non-critical, continuing): {}", emailEx.getMessage());
+            // Don't throw - email failure shouldn't break the whole upload
+        }
+
+        // Step 7: Get user preferences
+        String preferredRole = currentUser.getPreferredRole();
+        String preferredLocation = currentUser.getPreferredLocation();
         if (preferredLocation == null || preferredLocation.isBlank()) {
-            preferredLocation = resume.getOwner().getCity();
+            preferredLocation = currentUser.getCity();
         }
         if (preferredLocation == null || preferredLocation.isBlank()) {
             preferredLocation = "Remote";
         }
-        List<JobRecommendationResponse> recommendations =
-                jobRecommendationService.recommendJobs(
-                        savedResume.getId(),
-                        preferredRole == null || preferredRole.isBlank() ? "Software Engineer" : preferredRole,
-                        preferredLocation
-                );
-        emailService.sendJobRecommendations(savedResume, preferredRole, preferredLocation, recommendations);
+        if (preferredRole == null || preferredRole.isBlank()) {
+            preferredRole = "Software Engineer";
+        }
+        log.info("Step 7 COMPLETE: Role={}, Location={}", preferredRole, preferredLocation);
 
+        // Step 8: Get job recommendations
+        log.info("Step 8: Fetching job recommendations...");
+        List<JobRecommendationResponse> recommendations = List.of();
+        try {
+            recommendations = jobRecommendationService.recommendJobs(
+                    savedResume.getId(),
+                    preferredRole,
+                    preferredLocation
+            );
+            log.info("Step 8 COMPLETE: Found {} jobs", recommendations.size());
+        } catch (Exception jobEx) {
+            log.error("Step 8 FAILED (non-critical, continuing): {}", jobEx.getMessage());
+            // Don't throw - job recommendation failure shouldn't break upload
+        }
+
+        // Step 9: Send job recommendations email
+        log.info("Step 9: Sending job recommendations email...");
+        try {
+            emailService.sendJobRecommendations(savedResume, preferredRole, preferredLocation, recommendations);
+            log.info("Step 9 COMPLETE: Job recommendations email sent");
+        } catch (Exception emailEx) {
+            log.error("Step 9 FAILED (non-critical): {}", emailEx.getMessage());
+        }
+
+        log.info("========== RESUME UPLOAD SUCCESSFUL ==========");
+        
         return new ResumeUploadResponse(
                 savedResume.getId(),
                 savedResume.getCandidateName(),
@@ -130,7 +197,11 @@ public class ResumeServiceImpl implements ResumeService {
         try {
             return tika.parseToString(file.getInputStream());
         } catch (IOException | TikaException ex) {
-            throw new IllegalArgumentException("Unable to parse uploaded PDF");
+            log.error("PDF EXTRACTION FAILED: {} - {}", ex.getClass().getSimpleName(), ex.getMessage());
+            throw new IllegalArgumentException("Unable to parse uploaded PDF: " + ex.getMessage());
+        } catch (Exception ex) {
+            log.error("UNEXPECTED ERROR in extractText: {} - {}", ex.getClass().getSimpleName(), ex.getMessage());
+            throw new RuntimeException("Failed to extract text from PDF", ex);
         }
     }
 

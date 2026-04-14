@@ -4,6 +4,7 @@ import com.careerassistant.dto.interview.InterviewPreparationRequest;
 import com.careerassistant.dto.interview.InterviewPreparationResponse;
 import com.careerassistant.entity.ResumeAnalysis;
 import com.careerassistant.entity.UserAccount;
+import com.careerassistant.exception.ResourceNotFoundException;
 import com.careerassistant.repository.ResumeAnalysisRepository;
 import com.careerassistant.security.CurrentUserService;
 import com.careerassistant.service.AiService;
@@ -12,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -23,42 +25,56 @@ public class InterviewPreparationServiceImpl implements InterviewPreparationServ
     private final ResumeAnalysisRepository resumeAnalysisRepository;
 
     @Override
+    @Transactional(readOnly = true)
     public InterviewPreparationResponse generate(InterviewPreparationRequest request) {
         UserAccount user = currentUserService.getCurrentUser();
-        String enrichedFocusArea = buildEnrichedFocusArea(request.focusArea(), user);
-        return aiService.generateInterviewPreparation(request.role(), enrichedFocusArea);
+        
+        // Fetch resume analysis for the specified resumeId
+        ResumeAnalysis analysis = resumeAnalysisRepository.findByResumeId(request.resumeId())
+                .orElseThrow(() -> new ResourceNotFoundException("Resume analysis not found for resumeId=" + request.resumeId()));
+        
+        // Verify resume ownership
+        if (!analysis.getResume().getOwner().getId().equals(user.getId())) {
+            throw new ResourceNotFoundException("Resume is not accessible");
+        }
+        
+        String enrichedContext = buildEnrichedContext(request, user, analysis);
+        return aiService.generateInterviewPreparation(request.targetRole(), enrichedContext);
     }
 
-    private String buildEnrichedFocusArea(String focusArea, UserAccount user) {
+    private String buildEnrichedContext(InterviewPreparationRequest request, UserAccount user, ResumeAnalysis analysis) {
         List<String> contextParts = new ArrayList<>();
-        contextParts.add("User focus: " + focusArea);
+        
+        contextParts.add("=== CANDIDATE BACKGROUND ===");
         if (StringUtils.hasText(user.getCurrentRole())) {
             contextParts.add("Current role: " + user.getCurrentRole());
         }
         if (user.getExperienceYears() != null) {
-            contextParts.add("Experience: " + user.getExperienceYears() + " years");
+            contextParts.add("Years of experience: " + user.getExperienceYears());
         }
-        if (StringUtils.hasText(user.getSkills())) {
-            contextParts.add("Known skills: " + user.getSkills());
-        }
-        if (StringUtils.hasText(user.getPreferredRole())) {
-            contextParts.add("Target preference: " + user.getPreferredRole());
-        }
-
-        resumeAnalysisRepository.findFirstByResumeOwnerIdOrderByCreatedAtDesc(user.getId())
-                .ifPresent(analysis -> addResumeContext(contextParts, analysis));
-
-        contextParts.add("Generate practical, company-style interview prep: round-wise questions, expected answer depth, and mistakes to avoid.");
-        return String.join("\n", contextParts);
-    }
-
-    private void addResumeContext(List<String> contextParts, ResumeAnalysis analysis) {
-        contextParts.add("Latest ATS score: " + analysis.getAtsScore());
+        
+        contextParts.add("\n=== RESUME ANALYSIS ===");
+        contextParts.add("Resume ATS score: " + analysis.getAtsScore() + "/100");
         if (StringUtils.hasText(analysis.getExtractedSkills())) {
-            contextParts.add("Resume skills: " + analysis.getExtractedSkills());
+            contextParts.add("Current skills: " + analysis.getExtractedSkills());
         }
         if (StringUtils.hasText(analysis.getMissingSkills())) {
-            contextParts.add("Resume skill gaps: " + analysis.getMissingSkills());
+            contextParts.add("Skill gaps: " + analysis.getMissingSkills());
         }
+        
+        contextParts.add("\n=== TARGET ROLE ===");
+        contextParts.add("Target position: " + request.targetRole());
+        contextParts.add("Interview focus: " + request.focusArea());
+        
+        contextParts.add("\n=== INSTRUCTIONS ===");
+        contextParts.add("Generate a comprehensive interview preparation guide:");
+        contextParts.add("1. Create 5-7 practical interview questions specific to " + request.targetRole());
+        contextParts.add("2. For each question, provide a strong answer using candidate's existing skills from: " + analysis.getExtractedSkills());
+        contextParts.add("3. Address skill gaps where applicable: " + analysis.getMissingSkills());
+        contextParts.add("4. Include common mistakes to avoid for this role");
+        contextParts.add("5. Create a 6-week learning roadmap to address gaps: " + analysis.getMissingSkills());
+        contextParts.add("6. Format as strict JSON with keys: role, questionAnswers (array of {question, answer}), roadmap (array of weekly steps)");
+        
+        return String.join("\n", contextParts);
     }
 }

@@ -28,10 +28,13 @@ spring:
     properties:
       mail:
         smtp:
-          auth: ${MAIL_SMTP_AUTH:true}
+          auth: true
           starttls:
-            enable: ${MAIL_SMTP_STARTTLS_ENABLE:true}
-
+            enable: true
+            required: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
 ai:
   provider: ${AI_PROVIDER:gemini}
   openai:
@@ -58,5 +61,5 @@ security:
 app:
   allowed-origins: ${APP_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:5174,http://localhost:3000}
   email:
-    enabled: ${APP_EMAIL_ENABLED:false}
+    enabled: ${APP_EMAIL_ENABLED:true }
     from: ${APP_EMAIL_FROM:no-reply@careerassistant.local}

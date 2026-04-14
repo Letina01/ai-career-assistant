@@ -51,6 +51,13 @@ public class AuthServiceImpl implements AuthService {
         user.setPassword(passwordEncoder.encode(request.password()));
         user.setRole(request.role() == null ? Role.APPLICANT : request.role());
         UserAccount saved = userAccountRepository.save(user);
+        
+        try {
+            emailService.sendWelcomeEmail(saved);
+        } catch (Exception emailEx) {
+            log.warn("Failed to send welcome email: {}", emailEx.getMessage());
+        }
+        
         return toResponse(saved);
     }
 

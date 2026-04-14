@@ -3,6 +3,7 @@ package com.careerassistant.exception;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.AuthenticationException;
@@ -12,8 +13,10 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import jakarta.validation.ConstraintViolationException;
 
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(ResourceNotFoundException.class)
@@ -37,9 +40,33 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest().body(body);
     }
 
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<Map<String, Object>> handleConstraintViolation(ConstraintViolationException exception) {
+        Map<String, Object> body = base(HttpStatus.BAD_REQUEST, "Validation failed");
+        Map<String, String> errors = new HashMap<>();
+        exception.getConstraintViolations().forEach(cv -> 
+            errors.put(cv.getPropertyPath().toString(), cv.getMessage())
+        );
+        body.put("errors", errors);
+        return ResponseEntity.badRequest().body(body);
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, Object>> handleBadRequest(IllegalArgumentException exception) {
+        log.warn("Bad request: {}", exception.getMessage());
         return build(HttpStatus.BAD_REQUEST, exception.getMessage());
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<Map<String, Object>> handleIllegalState(IllegalStateException exception) {
+        log.warn("Illegal state: {}", exception.getMessage());
+        return build(HttpStatus.BAD_REQUEST, exception.getMessage());
+    }
+
+    @ExceptionHandler(RuntimeException.class)
+    public ResponseEntity<Map<String, Object>> handleRuntime(RuntimeException exception) {
+        log.error("Runtime error: {}", exception.getMessage(), exception);
+        return build(HttpStatus.INTERNAL_SERVER_ERROR, exception.getMessage());
     }
 
     @ExceptionHandler(AuthenticationException.class)
@@ -59,6 +86,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGeneric(Exception exception) {
+        log.error("UNHANDLED EXCEPTION: {} - {}", exception.getClass().getSimpleName(), exception.getMessage(), exception);
         return build(HttpStatus.INTERNAL_SERVER_ERROR, exception.getMessage());
     }
 
@@ -75,3 +103,4 @@ public class GlobalExceptionHandler {
         return body;
     }
 }
+

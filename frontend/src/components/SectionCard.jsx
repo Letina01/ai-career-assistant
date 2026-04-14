@@ -1,6 +1,6 @@
-export default function SectionCard({ title, subtitle, children }) {
+export default function SectionCard({ title, subtitle, children, className = '' }) {
   return (
-    <section className="card">
+    <section className={`card section-card ${className}`}>
       <div className="card-head">
         <div>
           <h2>{title}</h2>

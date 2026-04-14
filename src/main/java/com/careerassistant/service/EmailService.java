@@ -13,4 +13,5 @@ public interface EmailService {
     void sendJobRecommendations(Resume resume, String preferredRole, String preferredLocation, List<JobRecommendationResponse> jobs);
     void sendApplicationStatusUpdate(JobApplication application, ApplicationStatus previousStatus, ApplicationStatus newStatus);
     void sendPasswordResetToken(UserAccount user, String token);
+    void sendWelcomeEmail(UserAccount user);
 }

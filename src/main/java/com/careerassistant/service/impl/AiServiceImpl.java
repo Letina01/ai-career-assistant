@@ -7,6 +7,7 @@ import com.careerassistant.dto.resumeimprove.ResumeImprovementResponse;
 import com.careerassistant.dto.skillgap.SkillGapResponse;
 import com.careerassistant.exception.ExternalServiceException;
 import com.careerassistant.service.AiService;
+import com.careerassistant.service.SkillGapAnalyzer;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.ArrayList;
@@ -35,6 +36,7 @@ public class AiServiceImpl implements AiService {
 
     private final WebClient webClient;
     private final AiProperties aiProperties;
+    private final SkillGapAnalyzer skillGapAnalyzer;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
@@ -162,21 +164,38 @@ public class AiServiceImpl implements AiService {
 
     @Override
     public SkillGapResponse generateSkillGap(String targetRole, List<String> currentSkills) {
-        List<String> missingSkills = COMMON_SKILLS.stream()
-                .filter(skill -> currentSkills.stream().noneMatch(existing -> existing.equalsIgnoreCase(skill)))
-                .limit(6)
-                .toList();
-        return new SkillGapResponse(
-                targetRole,
-                currentSkills,
-                missingSkills,
-                List.of(
-                        "Week 1-2: map " + targetRole + " expectations and refresh core concepts.",
-                        "Week 3-4: build one project covering " + String.join(", ", missingSkills.stream().limit(3).toList()) + ".",
-                        "Week 5-6: practice interview questions and deploy your project.",
-                        "Week 7+: tailor resume and start targeted applications."
-                )
-        );
+        if (!hasApiKey()) {
+            log.info("No AI API key available, using dynamic skill gap analyzer");
+            return skillGapAnalyzer.analyzeSkillGap("", targetRole);
+        }
+
+        try {
+            String reply = callProvider("""
+                    Analyze the skill gap for a candidate targeting the role: %s
+                    
+                    Current skills (comma-separated): %s
+                    
+                    Return STRICT JSON with keys:
+                    - missingSkills: array of 5-8 specific skills needed for this role
+                    - roadmap: array of 4-6 concise learning milestones
+                    
+                    Focus on practical, job-relevant skills and realistic timeline.
+                    """.formatted(targetRole, String.join(", ", currentSkills)));
+
+            JsonNode json = objectMapper.readTree(reply);
+            List<String> missingSkills = readList(json, "missingSkills", 
+                    skillGapAnalyzer.getRequiredSkillsForRole(targetRole).stream().toList());
+
+            return new SkillGapResponse(
+                    targetRole,
+                    currentSkills,
+                    missingSkills,
+                    readList(json, "roadmap", skillGapAnalyzer.generateDynamicRoadmap(missingSkills, targetRole))
+            );
+        } catch (Exception ex) {
+            log.warn("AI skill gap analysis failed, using dynamic fallback: {}", ex.getMessage());
+            return skillGapAnalyzer.analyzeSkillGap("", targetRole);
+        }
     }
 
     @Override
@@ -324,4 +343,41 @@ public class AiServiceImpl implements AiService {
     private boolean hasGeminiKey() {
         return StringUtils.hasText(aiProperties.getGemini().getApiKey());
     }
+
+    @Override
+    public String rewriteResume(String improvementInstructions, String resumeContext) {
+        if (!hasApiKey()) {
+            return generateDefaultRewrittenResume(resumeContext);
+        }
+        
+        String prompt = "You are an expert resume writer. Based on the provided resume and improvement instructions, rewrite the entire resume to be more impactful, ATS-optimized, and compelling. " +
+                "Maintain accuracy while improving language, adding metrics where possible, and using strong action verbs.\n\n" +
+                resumeContext;
+        
+        try {
+            return callProvider(prompt);
+        } catch (Exception ex) {
+            log.error("Failed to rewrite resume with AI: {}", ex.getMessage());
+            return generateDefaultRewrittenResume(resumeContext);
+        }
+    }
+
+    private String generateDefaultRewrittenResume(String resumeContext) {
+        // Fallback: Apply basic improvements without AI
+        String improved = resumeContext
+                .replace("worked on", "delivered")
+                .replace("Worked on", "Delivered")
+                .replace("responsible for", "owned")
+                .replace("Responsible for", "Owned")
+                .replace("involved in", "led")
+                .replace("Involved in", "Led")
+                .replace("helped", "contributed significantly to")
+                .replace("Helped", "Contributed significantly to")
+                .replace("did", "implemented")
+                .replace("Did", "Implemented");
+        
+        log.info("Resume rewritten using fallback strategy (no AI available)");
+        return improved;
+    }
 }
+

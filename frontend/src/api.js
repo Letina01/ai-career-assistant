@@ -51,6 +51,15 @@ export const sendChatMessage = (payload) => api.post('/chat', payload).then((res
 export const generateInterviewPrep = (payload) => api.post('/interview/prepare', payload).then((res) => res.data);
 export const analyzeSkillGap = (payload) => api.post('/skill-gap', payload).then((res) => res.data);
 export const improveResume = (payload) => api.post('/resume-improvements', payload).then((res) => res.data);
+export const rewriteResume = (payload) => api.post('/resume-improvements/rewrite', payload).then((res) => res.data);
+export const downloadResumeFile = (resumeText, candidateName, format = 'pdf') =>
+  api.get('/resume-improvements/download', {
+    params: { resumeText, candidateName, format },
+    responseType: 'blob'
+  }).then((res) => ({
+    blob: res.data,
+    fileName: `${candidateName.replace(/\s+/g, '_')}_resume.${format}`
+  }));
 export const fetchApplicantJobs = () => api.get('/applicant/jobs').then((res) => res.data);
 export const applyToJob = (jobId, payload) => api.post(`/applicant/jobs/${jobId}/apply`, payload).then((res) => res.data);
 export const fetchMyApplications = () => api.get('/applicant/applications').then((res) => res.data);
@@ -60,9 +69,30 @@ export const fetchRecruiterApplications = () => api.get('/recruiter/applications
 export const updateApplicationStatus = (applicationId, payload) =>
   api.put(`/recruiter/applications/${applicationId}`, payload).then((res) => res.data);
 export const downloadApplicantResume = (applicationId) =>
-  api.get(`/recruiter/applications/${applicationId}/resume`, { responseType: 'blob' }).then((res) => ({
-    blob: res.data,
-    fileName: res.headers['content-disposition']?.split('filename=')[1]?.replace(/"/g, '') || 'resume.txt'
-  }));
+  api.get(`/recruiter/applications/${applicationId}/resume`, { 
+    responseType: 'blob',
+    timeout: 30000
+  }).then((res) => {
+    const contentDisposition = res.headers['content-disposition'];
+    let fileName = 'resume.pdf';
+    
+    if (contentDisposition) {
+      const filenameMatch = contentDisposition.match(/filename\*?=['"]?(?:UTF-8'')?([^;\n"']+)/i);
+      if (filenameMatch) {
+        fileName = decodeURIComponent(filenameMatch[1]);
+      }
+    }
+    
+    return {
+      blob: new Blob([res.data], { type: res.headers['content-type'] || 'application/pdf' }),
+      fileName: fileName
+    };
+  });
 export const fetchProfile = () => api.get('/profile').then((res) => res.data);
 export const updateProfile = (payload) => api.put('/profile', payload).then((res) => res.data);
+
+// External Job Applications
+export const applyToExternalJob = (payload) => api.post('/applications/apply', payload).then((res) => res.data);
+export const fetchMyExternalApplications = () => api.get('/applications/my').then((res) => res.data);
+export const checkIfApplied = (payload) => api.post('/applications/check', payload).then((res) => res.data);
+export const fetchApplicationStats = () => api.get('/applications/stats').then((res) => res.data);

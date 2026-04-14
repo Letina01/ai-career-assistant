@@ -9,6 +9,7 @@ import com.careerassistant.entity.ApplicationStatus;
 import com.careerassistant.entity.ApplicationStatusHistory;
 import com.careerassistant.entity.JobApplication;
 import com.careerassistant.entity.JobPosting;
+import com.careerassistant.entity.Resume;
 import com.careerassistant.exception.ResourceNotFoundException;
 import com.careerassistant.repository.ApplicationStatusHistoryRepository;
 import com.careerassistant.repository.JobApplicationRepository;
@@ -17,15 +18,16 @@ import com.careerassistant.repository.ResumeAnalysisRepository;
 import com.careerassistant.security.CurrentUserService;
 import com.careerassistant.service.EmailService;
 import com.careerassistant.service.RecruiterService;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('RECRUITER')")
+@Slf4j
 public class RecruiterServiceImpl implements RecruiterService {
 
     private final JobPostingRepository jobPostingRepository;
@@ -34,6 +36,7 @@ public class RecruiterServiceImpl implements RecruiterService {
     private final ApplicationStatusHistoryRepository applicationStatusHistoryRepository;
     private final CurrentUserService currentUserService;
     private final EmailService emailService;
+    private final PdfGeneratorService pdfGeneratorService;
 
     @Override
     public RecruiterJobPostingResponse createJob(RecruiterJobPostingRequest request) {
@@ -101,12 +104,27 @@ public class RecruiterServiceImpl implements RecruiterService {
             throw new ResourceNotFoundException("Application not accessible");
         }
 
-        String content = application.getResume().getExtractedText();
+        Resume resume = application.getResume();
+        String candidateName = application.getApplicant().getFullName();
+        
+        log.info("Resume download - Candidate: {}, Resume ID: {}, FileName: {}, FileData length: {}", 
+                candidateName, resume.getId(), resume.getFileName(), 
+                resume.getFileData() != null ? resume.getFileData().length : "null");
+        
+        if (resume.getFileData() != null && resume.getFileData().length > 0) {
+            log.info("Downloading ORIGINAL resume file for candidate: {}", candidateName);
+            String originalFileName = resume.getFileName();
+            return new ResumeDownloadPayload(originalFileName, resume.getFileData());
+        }
+        
+        log.info("Original file not found in DB, generating PDF from extracted text for candidate: {}", candidateName);
+        String content = resume.getExtractedText();
         if (content == null || content.isBlank()) {
             content = "No extracted resume text available.";
         }
-        String fileName = application.getApplicant().getFullName().replace(" ", "_") + "_resume.txt";
-        return new ResumeDownloadPayload(fileName, content.getBytes(StandardCharsets.UTF_8));
+        byte[] pdfBytes = pdfGeneratorService.generateResumePdf(candidateName, content);
+        String fileName = candidateName.replace(" ", "_") + "_resume.pdf";
+        return new ResumeDownloadPayload(fileName, pdfBytes);
     }
 
     private RecruiterJobPostingResponse toResponse(JobPosting jobPosting) {

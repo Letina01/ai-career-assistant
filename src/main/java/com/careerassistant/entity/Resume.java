@@ -32,6 +32,13 @@ public class Resume extends BaseEntity {
     @Column(nullable = false, columnDefinition = "LONGTEXT")
     private String extractedText;
 
+    @Lob
+    @Column(nullable = true)
+    private byte[] fileData;
+
+    @Column(nullable = true, length = 100)
+    private String fileType;
+
     @OneToOne(mappedBy = "resume", fetch = FetchType.LAZY)
     private ResumeAnalysis resumeAnalysis;
 }

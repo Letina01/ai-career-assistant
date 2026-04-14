@@ -9,7 +9,6 @@ import InterviewPage from './pages/InterviewPage';
 import SkillGapPage from './pages/SkillGapPage';
 import ResumeImprovePage from './pages/ResumeImprovePage';
 import RecruiterPage from './pages/RecruiterPage';
-import ApplicationsPage from './pages/ApplicationsPage';
 import ProfilePage from './pages/ProfilePage';
 
 export default function App() {
@@ -19,11 +18,10 @@ export default function App() {
     ['/', 'Recruiter Hub']
   ];
   const applicantLinks = [
-    ['/', 'Home'],
+    ['/', 'Dashboard'],
     ['/profile', 'Profile'],
     ['/resume', 'Resume'],
     ['/jobs', 'Jobs'],
-    ['/applications', 'Applications'],
     ['/chatbot', 'Chatbot'],
     ['/interview', 'Interview Prep'],
     ['/skill-gap', 'Skill Gap'],
@@ -32,13 +30,21 @@ export default function App() {
   const links = user?.role === 'RECRUITER' ? recruiterLinks : applicantLinks;
 
   return (
-    <div className={user ? 'shell app-shell' : 'shell auth-shell'}>
+    <div className={user ? 'shell app-shell' : 'shell'}>
       {user && (
         <aside className="sidebar">
-          <div>
-            <p className="eyebrow accent-eyebrow">AI Career Assistant</p>
-            <h1>Career OS</h1>
-            <p className="muted">{`${user.fullName} | ${user.role}`}</p>
+          <div className="sidebar-brand">
+            <div className="brand-icon-new">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                <path d="M2 17l10 5 10-5"/>
+                <path d="M2 12l10 5 10-5"/>
+              </svg>
+            </div>
+            <div>
+              <h1>CareerAI</h1>
+              <p className="muted">{user.role}</p>
+            </div>
           </div>
           <nav className="nav">
             {links.map(([to, label]) => (
@@ -46,8 +52,15 @@ export default function App() {
                 {label}
               </NavLink>
             ))}
-            <button type="button" onClick={logout}>Logout</button>
           </nav>
+          <div className="sidebar-footer">
+            <div className="user-info">
+              <span>{user.fullName}</span>
+              <button type="button" onClick={logout} className="logout-btn">
+                Logout
+              </button>
+            </div>
+          </div>
         </aside>
       )}
 
@@ -58,7 +71,6 @@ export default function App() {
           <Route path="/profile" element={user?.role === 'APPLICANT' ? <ProfilePage /> : <Navigate to="/auth" replace />} />
           <Route path="/resume" element={user?.role === 'APPLICANT' ? (user.profileComplete ? <ResumePage /> : <Navigate to="/profile" replace />) : <Navigate to="/auth" replace />} />
           <Route path="/jobs" element={user?.role === 'APPLICANT' ? (user.profileComplete && user.resumeUploaded ? <JobsPage /> : <Navigate to={applicantDefaultRoute} replace />) : <Navigate to="/auth" replace />} />
-          <Route path="/applications" element={user?.role === 'APPLICANT' ? (user.profileComplete && user.resumeUploaded ? <ApplicationsPage /> : <Navigate to={applicantDefaultRoute} replace />) : <Navigate to="/auth" replace />} />
           <Route path="/chatbot" element={user?.role === 'APPLICANT' ? (user.profileComplete && user.resumeUploaded ? <ChatbotPage /> : <Navigate to={applicantDefaultRoute} replace />) : <Navigate to="/auth" replace />} />
           <Route path="/interview" element={user?.role === 'APPLICANT' ? (user.profileComplete && user.resumeUploaded ? <InterviewPage /> : <Navigate to={applicantDefaultRoute} replace />) : <Navigate to="/auth" replace />} />
           <Route path="/skill-gap" element={user?.role === 'APPLICANT' ? (user.profileComplete && user.resumeUploaded ? <SkillGapPage /> : <Navigate to={applicantDefaultRoute} replace />) : <Navigate to="/auth" replace />} />

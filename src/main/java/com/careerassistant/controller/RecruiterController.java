@@ -54,9 +54,38 @@ public class RecruiterController {
     @GetMapping("/applications/{applicationId}/resume")
     public ResponseEntity<ByteArrayResource> downloadResume(@PathVariable Long applicationId) {
         ResumeDownloadPayload payload = recruiterService.downloadApplicantResume(applicationId);
+        
+        MediaType mediaType = getMediaType(payload.fileName());
+        String filename = sanitizeFilename(payload.fileName());
+        
         return ResponseEntity.ok()
-                .contentType(MediaType.TEXT_PLAIN)
-                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + payload.fileName() + "\"")
+                .contentType(mediaType)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"; filename*=UTF-8''" + filename)
+                .header(HttpHeaders.CONTENT_LENGTH, String.valueOf(payload.content().length))
                 .body(new ByteArrayResource(payload.content()));
+    }
+
+    private MediaType getMediaType(String fileName) {
+        if (fileName == null) {
+            return MediaType.APPLICATION_OCTET_STREAM;
+        }
+        String lower = fileName.toLowerCase();
+        if (lower.endsWith(".pdf")) {
+            return MediaType.APPLICATION_PDF;
+        } else if (lower.endsWith(".doc")) {
+            return new MediaType("application", "msword");
+        } else if (lower.endsWith(".docx")) {
+            return new MediaType("application", "vnd.openxmlformats-officedocument.wordprocessingml.document");
+        } else if (lower.endsWith(".txt")) {
+            return MediaType.TEXT_PLAIN;
+        }
+        return MediaType.APPLICATION_OCTET_STREAM;
+    }
+
+    private String sanitizeFilename(String fileName) {
+        if (fileName == null) {
+            return "resume.pdf";
+        }
+        return fileName.replaceAll("[^a-zA-Z0-9._-]", "_");
     }
 }
