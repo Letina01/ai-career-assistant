@@ -33,7 +33,7 @@ public class Resume extends BaseEntity {
     private String extractedText;
 
     @Lob
-    @Column(nullable = true)
+    @Column(nullable = true, columnDefinition = "LONGBLOB")
     private byte[] fileData;
 
     @Column(nullable = true, length = 100)

@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 @Service
 @RequiredArgsConstructor
@@ -39,13 +40,16 @@ public class ExternalJobApplicationServiceImpl implements ExternalJobApplication
         }
 
         // Create application
+        String location = StringUtils.hasText(request.location()) ? request.location().trim() : "Not specified";
+        Integer matchScore = request.matchScore() != null ? request.matchScore() : 0;
+
         ExternalJobApplication application = new ExternalJobApplication(
             currentUser,
             request.jobTitle(),
             request.company(),
-            request.location(),
+            location,
             request.applyLink(),
-            request.matchScore()
+            matchScore
         );
 
         ExternalJobApplication saved = applicationRepository.save(application);
